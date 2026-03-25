@@ -3,21 +3,14 @@
     {
       "source": "/api/(.*)",
       "headers": [
-        {
-          "key": "Content-Type",
-          "value": "image/png"
-        },
-        {
-          "key": "X-Robots-Tag",
-          "value": "none"
-        }
+        { "key": "Content-Type", "value": "image/png" },
+        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
       ]
     }
   ],
   "rewrites": [
-    {
-      "source": "/api/hotdog",
-      "destination": "/api/grab"
-    }
+    { "source": "/hotdog.png", "destination": "/api/grab" },
+    { "source": "/api/hotdog", "destination": "/api/grab" }
   ]
 }
