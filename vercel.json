@@ -1,5 +1,23 @@
 {
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "image/png"
+        },
+        {
+          "key": "X-Robots-Tag",
+          "value": "none"
+        }
+      ]
+    }
+  ],
   "rewrites": [
-    { "source": "/hotdog.png", "destination": "/api/grab" }
+    {
+      "source": "/api/hotdog",
+      "destination": "/api/grab"
+    }
   ]
 }
